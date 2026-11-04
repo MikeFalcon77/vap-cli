@@ -1,0 +1,21 @@
+/target
+/dist
+.vap-cli/
+__pycache__/
+*.secret
+.env
+.env.*
+!.env.example
+
+# Embedded build inputs are versioned; other local assets are disposable.
+/assets/*
+!/assets/catalog.json.gz
+!/assets/provenance.json
+
+# Local credentials and tooling state.
+*.pem
+*-service-account*.json
+.idea/
+.cache/
+.review-tmp/
+/REVIEW_*.md

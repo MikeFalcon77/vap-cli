@@ -1,0 +1,56 @@
+[package]
+name = "vap-cli"
+version = "0.1.0"
+edition = "2024"
+description = "Discoverable Virtuozzo API CLI for people and automation"
+rust-version = "1.88"
+
+[[bin]]
+name = "vap"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["string"] }
+clap_complete = "4.5"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+reqwest = { version = "0.13", optional = true, default-features = false, features = ["rustls-no-provider", "form", "json", "stream", "gzip", "system-proxy"] }
+toolkit-http = { package = "cf-gears-toolkit-http", version = "=0.8.0", optional = true, default-features = false }
+url = "2"
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12"] }
+rustls-native-certs = "0.8"
+webpki-roots = "1"
+rpassword = "7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal"] }
+zeroize = "1"
+http = "1"
+bytes = "1"
+http-body-util = "0.1"
+
+[features]
+default = ["reqwest-client"]
+reqwest-client = ["dep:reqwest", "rustls/ring"]
+toolkit-http-client = ["dep:toolkit-http"]
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["windows-native"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Memory", "Win32_Storage_FileSystem"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["async-secret-service", "tokio", "crypto-rust"] }
+
+[dev-dependencies]
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tempfile = "3"
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "ring", "pem"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "unwind"

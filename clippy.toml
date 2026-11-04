@@ -1,0 +1,32 @@
+# Clippy configuration for vap-cli
+avoid-breaking-exported-api = false
+
+check-inconsistent-struct-field-initializers = true
+
+lint-commented-code = true
+
+# Type complexity threshold (default is 250)
+type-complexity-threshold = 190
+# Cognitive complexity threshold (default is 25)
+cognitive-complexity-threshold = 20
+
+# Function length threshold (default is 100)
+too-many-lines-threshold = 200
+
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+# Test match arms use `panic!("expected X, got {other:?}")` to report the
+# unexpected value, which an assert! cannot do as clearly.
+allow-panic-in-tests = true
+
+# Stricter thresholds for LLM-generated code
+single-char-binding-names-threshold = 4
+large-error-threshold = 128
+
+# Struct field limits
+max-struct-bools = 2
+
+# Disallowed types (prevent common LLM mistakes)
+disallowed-types = [
+    { path = "std::collections::LinkedList", reason = "Use Vec instead - LinkedList has poor cache locality" },
+]

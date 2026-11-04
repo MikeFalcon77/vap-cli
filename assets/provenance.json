@@ -1,0 +1,18 @@
+{
+  "platform_version": "8.15",
+  "source": "Official installed Jelastic CLI; API descriptions only, no user configuration",
+  "source_sha256": {
+    "api.json": "3c6b38fc6b387fba7a872a7f8272dbf54f2450e6ca0ed60157f112aad926a133",
+    "private_api.json": "e11ad440ae12d5df14e1538e5a4abd7a204aa96d161cd95aacb9a69943015fb6",
+    "jelastic-cli.jar": "db173ec620a41da80fdfe5b28b07b5df410bcdd11985a07bc9f30ca0d7b61d43"
+  },
+  "public_methods": 422,
+  "extended_methods": 1376,
+  "s3_methods": 18,
+  "coverage": "All catalogued methods and parameters are routed; this does not assert live authorization or behavioral parity for every operation.",
+  "documentation": [
+    "https://www.virtuozzo.com/application-management-docs/api-cli/",
+    "https://docs.jelastic.com/api/",
+    "https://docs.jelastic.com/api/private/"
+  ]
+}
