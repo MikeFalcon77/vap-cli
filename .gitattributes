@@ -1,0 +1,3 @@
+# Keep clean checkouts compatible with rustfmt's Unix newline policy on every OS.
+* text=auto eol=lf
+*.gz binary

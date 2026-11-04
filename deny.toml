@@ -1,0 +1,8 @@
+# Inspect the complete dependency graph, including both HTTP backends and all OSes.
+[graph]
+all-features = true
+
+[advisories]
+db-urls = ["https://github.com/RustSec/advisory-db"]
+unmaintained = "all"
+# CI uses --warn unmaintained; vulnerabilities remain errors. Do not ignore IDs.

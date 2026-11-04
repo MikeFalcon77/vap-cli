@@ -1,0 +1,73 @@
+name: Version release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Validate release version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Check tag against Cargo package version
+        shell: python
+        run: |
+          import os
+          import tomllib
+          from pathlib import Path
+
+          version = tomllib.loads(Path('Cargo.toml').read_text(encoding='utf-8'))['package']['version']
+          expected = f'v{version}'
+          if os.environ['GITHUB_REF_NAME'] != expected:
+              raise SystemExit(f'Release tag must match Cargo.toml: {expected}')
+
+  checks:
+    needs: version
+    uses: ./.github/workflows/ci.yml
+    with:
+      package: true
+
+  publish:
+    name: Attest and publish
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: vap-*
+          merge-multiple: true
+          path: dist
+      - name: Verify all release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          count=$(find . -maxdepth 1 -name '*.sha256' | wc -l)
+          if [[ "$count" -ne 12 ]]; then
+            echo "Expected 12 binary checksums, got $count" >&2
+            exit 1
+          fi
+          sha256sum --check ./*.sha256
+      - uses: actions/attest@v4
+        with:
+          subject-path: dist/vap-*
+      - name: Publish verified version tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/vap-* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes

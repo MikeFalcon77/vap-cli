@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_call:
+    inputs:
+      package:
+        description: Build and upload release binaries after checks
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rustsec:
+    name: RustSec
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - uses: actions/cache@v4
+        id: deny-cache
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: cargo-deny-0.20.2-${{ runner.os }}-${{ runner.arch }}-rust-1.98
+      - name: Install cargo-deny
+        if: steps.deny-cache.outputs.cache-hit != 'true'
+        run: cargo install cargo-deny --version 0.20.2 --locked
+      - name: Check RustSec advisories for all platforms and backends
+        run: cargo deny --locked check advisories --warn unmaintained
+
+  check:
+    if: github.event_name != 'schedule'
+    name: ${{ matrix.backend }} / ${{ matrix.platform.target }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [reqwest, toolkit-http]
+        platform:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.platform.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install native musl compiler
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Install pinned Rust toolchain and target
+        run: |
+          rustup show
+          rustup target add ${{ matrix.platform.target }}
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Dependency guard
+        run: python tools/check_dependencies.py --backend ${{ matrix.backend }} --target ${{ matrix.platform.target }}
+      - name: Clippy
+        run: cargo clippy --no-default-features --features ${{ matrix.backend }}-client --locked --target ${{ matrix.platform.target }} --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test --no-default-features --features ${{ matrix.backend }}-client --locked --target ${{ matrix.platform.target }} --all-targets
+      - name: Release build
+        if: inputs.package
+        run: cargo build --no-default-features --features ${{ matrix.backend }}-client --locked --release --target ${{ matrix.platform.target }}
+      - name: Package binary and measure
+        if: inputs.package
+        shell: bash
+        run: |
+          set -euo pipefail
+          suffix=''
+          if [[ '${{ runner.os }}' == 'Windows' ]]; then suffix='.exe'; fi
+          python tools/package.py --backend '${{ matrix.backend }}' --target '${{ matrix.platform.target }}' --binary 'target/${{ matrix.platform.target }}/release/vap'"$suffix"
+      - uses: actions/upload-artifact@v4
+        if: inputs.package
+        with:
+          name: vap-${{ matrix.backend }}-${{ matrix.platform.target }}
+          path: dist/vap-*
+          if-no-files-found: error
+          retention-days: 7
