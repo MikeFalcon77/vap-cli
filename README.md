@@ -70,10 +70,12 @@ RustSec also runs daily; vulnerabilities fail CI, while unmaintained crates prod
 warnings. Dependabot checks Cargo and GitHub Actions weekly.
 
 Pushing a tag matching the Cargo version (`vX.Y.Z`) publishes a
-[GitHub Release](https://github.com/MikeFalcon77/vap-cli/releases) with six binaries
-using the default reqwest backend, SHA256 checksums and provenance attestations.
-Verify a downloaded binary with:
+[GitHub Release](https://github.com/MikeFalcon77/vap-cli/releases) using the default
+reqwest backend. Each platform gets an archive containing `vap` (Linux/macOS) or
+`vap.exe` (Windows), a SHA256 checksum and a provenance attestation. Archive names
+include the version and target; Windows uses ZIP, Linux/macOS use tar.gz.
+Verify a downloaded archive with:
 
 ```sh
-gh attestation verify <binary> --repo MikeFalcon77/vap-cli
+gh attestation verify <archive> --repo MikeFalcon77/vap-cli
 ```

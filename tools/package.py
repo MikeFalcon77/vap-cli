@@ -5,8 +5,11 @@ import json
 import os
 import statistics
 import subprocess
+import tarfile
+import tempfile
 import time
 import tomllib
+import zipfile
 from pathlib import Path
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -14,14 +17,16 @@ parser.add_argument("--target", required=True)
 parser.add_argument("--binary", type=Path, required=True)
 parser.add_argument("--out", type=Path, default=Path("dist"))
 parser.add_argument("--backend", choices=["reqwest", "toolkit-http"])
+parser.add_argument("--archive", action="store_true", help="Create a release archive containing vap or vap.exe")
 args = parser.parse_args()
 version = tomllib.loads((Path(__file__).resolve().parents[1] / "Cargo.toml").read_text(encoding="utf-8"))["package"]["version"]
 if os.environ.get("GITHUB_REF_TYPE") == "tag" and os.environ.get("GITHUB_REF_NAME") != f"v{version}":
     raise SystemExit("Release tag must match the Cargo package version")
-args.out.mkdir(exist_ok=True)
+args.out.mkdir(parents=True, exist_ok=True)
 suffix = ".exe" if "windows" in args.target else ""
 name = f"vap-{'%s-' % args.backend if args.backend else ''}{args.target}{suffix}"
-binary = args.out / name
+staging = tempfile.TemporaryDirectory() if args.archive else None
+binary = Path(staging.name) / f"vap{suffix}" if staging else args.out / name
 binary.write_bytes(args.binary.read_bytes())
 binary.chmod(0o755)
 times = []
@@ -55,10 +60,26 @@ else:
     if get(wintypes.HANDLE(int(process._handle)), ctypes.byref(counters), counters.cb):
         peak = counters.PeakWorkingSetSize
 digest = hashlib.sha256(binary.read_bytes()).hexdigest()
-(args.out / f"{name}.sha256").write_text(f"{digest}  {name}\n", encoding="utf-8")
+asset_digest = digest
+if args.archive:
+    extension = ".zip" if suffix else ".tar.gz"
+    name = f"vap-v{version}-{args.target}{extension}"
+    archive = args.out / name
+    if suffix:
+        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
+            output.write(binary, arcname=binary.name)
+    else:
+        with tarfile.open(archive, "w:gz") as output:
+            output.add(binary, arcname=binary.name)
+    asset_digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+(args.out / f"{name}.sha256").write_text(f"{asset_digest}  {name}\n", encoding="utf-8")
 metrics = {"version": version, "target": args.target, "backend": args.backend or "reqwest", "binary_bytes": binary.stat().st_size,
            "rustc": subprocess.check_output(["rustc", "--version"], text=True).strip(),
            "help_median_ms": round(statistics.median(times), 2), "help_peak_memory_bytes": peak,
            "sha256": digest, "measurement": "local process startup including OS overhead; not a cold-cache benchmark"}
+if args.archive:
+    metrics.update({"archive": name, "archive_sha256": asset_digest})
 (args.out / f"{name}.metrics.json").write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
 print(json.dumps(metrics, indent=2))
+if staging:
+    staging.cleanup()
