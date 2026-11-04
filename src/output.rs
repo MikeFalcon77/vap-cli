@@ -159,7 +159,9 @@ fn select_fields(value: &Value, fields: &[String]) -> Value {
 }
 
 pub fn success(data: Value, meta: Value, json_mode: bool) -> Result<()> {
-    let mut out = io::stdout().lock();
+    write_success(&mut io::stdout().lock(), data, meta, json_mode)
+}
+pub fn write_success(mut out: impl Write, data: Value, meta: Value, json_mode: bool) -> Result<()> {
     if json_mode {
         serde_json::to_writer(
             &mut out,

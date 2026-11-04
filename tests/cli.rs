@@ -1,3 +1,4 @@
+mod support;
 use serde_json::{Value, json};
 use std::{
     io::Write,
@@ -28,7 +29,7 @@ fn invoke(root: &tempfile::TempDir, args: &[&str], input: Option<&str>) -> std::
     } else {
         drop(child.stdin.take());
     }
-    child.wait_with_output().unwrap()
+    support::wait_output(child)
 }
 fn json_output(
     root: &tempfile::TempDir,
@@ -374,4 +375,171 @@ fn explicit_targets_override_input_and_unsupported_targets_fail() {
         None,
     );
     assert_eq!(out.status.code(), Some(2));
+}
+
+#[test]
+fn partial_catalog_returns_json_for_every_missing_convenience_method() {
+    let root = tempfile::tempdir().unwrap();
+    let catalogs = root.path().join("catalogs");
+    std::fs::create_dir(&catalogs).unwrap();
+    let catalog = json!({"format_version":1,"platform_version":"fixture","source":"fixture","methods":[{"namespace":"future","service":"service","name":"read","path":"future/service/rest/read","public":false,"doc_url":null,"parameters":[]}]});
+    std::fs::write(catalogs.join("default.json"), catalog.to_string()).unwrap();
+    for command in [
+        "exec",
+        "env list",
+        "env info",
+        "env create",
+        "env clone",
+        "env start",
+        "env stop",
+        "env delete",
+        "env templates",
+        "env regions",
+        "node list",
+        "node restart",
+        "node scale",
+        "logs list",
+        "logs read",
+        "logs watch",
+        "files list",
+        "files read",
+        "files write",
+        "files upload",
+        "files delete",
+        "vars list",
+        "vars set",
+        "vars delete",
+        "projects list",
+        "s3 list",
+        "s3 create",
+        "s3 delete",
+        "s3 objects",
+        "s3 create-account",
+        "s3 keys",
+        "s3 generate-key",
+        "billing quotas",
+        "billing pricing",
+        "operations list",
+        "operations get",
+    ] {
+        let mut args: Vec<_> = command.split_whitespace().collect();
+        args.extend(["--preview", "--json"]);
+        let (out, value) = json_output(&root, &args, None);
+        assert_eq!(out.status.code(), Some(1), "{command}: {value}");
+        assert_eq!(value["error"]["code"], "METHOD_UNAVAILABLE", "{command}");
+        assert!(out.stderr.is_empty(), "{command}");
+    }
+}
+
+#[test]
+fn business_tokens_are_private_inputs_not_reserved_sessions() {
+    let root = tempfile::tempdir().unwrap();
+    for service in ["authentication", "sso"] {
+        let input = if service == "authentication" {
+            r#"{"token":"BUSINESS_SECRET_SENTINEL","userHeaders":"{}"}"#
+        } else {
+            r#"{"token":"BUSINESS_SECRET_SENTINEL"}"#
+        };
+        let (out, value) = json_output(
+            &root,
+            &[
+                "api",
+                "users",
+                service,
+                "signinbytoken",
+                "--input",
+                "-",
+                "--preview",
+                "--json",
+            ],
+            Some(input),
+        );
+        assert!(out.status.success(), "{value}");
+        assert_eq!(value["data"]["parameters"]["token"], "[REDACTED]");
+        assert!(!String::from_utf8_lossy(&out.stdout).contains("BUSINESS_SECRET_SENTINEL"));
+        for option in ["--param", "--token"] {
+            let value = if option == "--param" {
+                "token=BUSINESS_SECRET_SENTINEL"
+            } else {
+                "BUSINESS_SECRET_SENTINEL"
+            };
+            let (out, _) = json_output(
+                &root,
+                &[
+                    "api",
+                    "users",
+                    service,
+                    "signinbytoken",
+                    option,
+                    value,
+                    "--preview",
+                    "--json",
+                ],
+                None,
+            );
+            assert_eq!(out.status.code(), Some(2));
+            assert!(!String::from_utf8_lossy(&out.stdout).contains("BUSINESS_SECRET_SENTINEL"));
+        }
+    }
+    let (out, value) = json_output(
+        &root,
+        &[
+            "env",
+            "stop",
+            "--env",
+            "example",
+            "--read-only",
+            "--yes",
+            "--json",
+        ],
+        None,
+    );
+    assert_eq!(out.status.code(), Some(4));
+    assert_eq!(value["error"]["code"], "PERMISSION_DENIED");
+}
+
+#[test]
+fn resolved_context_preserves_target_precedence_and_credential_origin() {
+    let root = tempfile::tempdir().unwrap();
+    let config = json!({"default_profile":"fixture","profiles":{"fixture":{"platform":"https://original.example","credential_store":"file","credential_kind":"session","credential_id":"missing-test-credential","imported_from":null,"environment":"saved","project":"673","node":"123"}}});
+    std::fs::write(root.path().join("config.json"), config.to_string()).unwrap();
+    for (extra, input, expected) in [
+        (vec![], None, "saved"),
+        (
+            vec!["--input", "-"],
+            Some(r#"{"domain":"from-file"}"#),
+            "from-file",
+        ),
+        (
+            vec!["--input", "-", "--env", "explicit"],
+            Some(r#"{"envName":"from-file"}"#),
+            "explicit",
+        ),
+    ] {
+        let mut args = vec!["env", "info", "--preview", "--json"];
+        args.extend(extra);
+        let (out, value) = json_output(&root, &args, input);
+        assert!(out.status.success(), "{value}");
+        assert_eq!(value["data"]["parameters"]["envName"], expected);
+    }
+    let (out, value) = json_output(
+        &root,
+        &["s3", "list", "--project", "777", "--preview", "--json"],
+        None,
+    );
+    assert!(out.status.success(), "{value}");
+    assert_eq!(value["data"]["parameters"]["projectId"], 777);
+    let (out, value) = json_output(
+        &root,
+        &[
+            "env",
+            "list",
+            "--platform",
+            "https://other.example",
+            "--json",
+        ],
+        None,
+    );
+    assert_eq!(out.status.code(), Some(4));
+    assert_eq!(value["error"]["code"], "PERMISSION_DENIED");
 }

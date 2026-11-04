@@ -229,43 +229,34 @@ pub fn build(catalog: &Catalog) -> Command {
                     .arg(flag("clear", "Clear all target defaults")),
             ),
     );
-    for (name, about, commands) in friendly_groups() {
-        let mut group = Command::new(name).about(about).subcommand_required(true);
-        for (name, path) in commands {
-            let mut cmd = Command::new(name).about(format!("API: {path}"));
-            if let Some(method) = catalog.find(path) {
-                cmd=cmd.after_help(format!("Use --input file.json or --param NAME=VALUE.\nInspect parameters: vap api describe {path}"));
-                if matches!(method.name.as_str(), "createenvironment" | "cloneenv") {
-                    cmd = cmd.arg(value("name", "New environment name"));
-                }
-                if name == "create" && path == "environment/control/rest/createenvironment" {
-                    cmd = cmd.arg(
-                        value("disk-gb", "Disk size in GB, applied to every node")
-                            .value_parser(clap::value_parser!(u32).range(1..)),
-                    );
-                }
-                if name == "watch" {
-                    cmd = cmd.arg(
-                        value("samples", "Finite number of log snapshots")
-                            .default_value("10")
-                            .value_parser(clap::value_parser!(u32).range(1..)),
-                    );
-                }
-                let _ = method;
+    let mut groups = BTreeMap::<&str, Command>::new();
+    for spec in crate::registry::COMMANDS {
+        let mut cmd=Command::new(spec.name).about(format!("API: {}",spec.path)).after_help(format!("Use --input file.json or --param NAME=VALUE.\nInspect parameters: vap api describe {}",spec.path));
+        for arg in spec.args {
+            let mut a = value(arg.name, arg.help);
+            if matches!(arg.kind, crate::registry::ArgKind::PositiveU32) {
+                a = a.value_parser(clap::value_parser!(u32).range(1..));
             }
-            group = group.subcommand(cmd);
+            if let Some(default) = arg.default {
+                a = a.default_value(default);
+            }
+            cmd = cmd.arg(a);
         }
+        if spec.group.is_empty() {
+            root = root.subcommand(cmd);
+        } else {
+            let group = groups.remove(spec.group).unwrap_or_else(|| {
+                Command::new(spec.group)
+                    .about(spec.group_help)
+                    .subcommand_required(true)
+            });
+            groups.insert(spec.group, group.subcommand(cmd));
+        }
+    }
+    for group in groups.into_values() {
         root = root.subcommand(group);
     }
     root.subcommand(
-        Command::new("exec")
-            .about("Execute a command on an explicit node; use --input for command payloads")
-            .arg(value(
-                "command-file",
-                "Read the command string from a file; - reads stdin",
-            )),
-    )
-    .subcommand(
         Command::new("completion")
             .about("Generate shell completions offline")
             .arg(Arg::new("shell").required(true).value_parser([
@@ -281,103 +272,6 @@ pub fn build(catalog: &Catalog) -> Command {
     )
 }
 
-pub type FriendlyGroup = (
-    &'static str,
-    &'static str,
-    Vec<(&'static str, &'static str)>,
-);
-pub fn friendly_groups() -> Vec<FriendlyGroup> {
-    vec![
-        (
-            "env",
-            "Environment lifecycle and templates",
-            vec![
-                ("list", "environment/control/rest/getenvs"),
-                ("info", "environment/control/rest/getenvinfo"),
-                ("create", "environment/control/rest/createenvironment"),
-                ("clone", "environment/control/rest/cloneenv"),
-                ("start", "environment/control/rest/startenv"),
-                ("stop", "environment/control/rest/stopenv"),
-                ("delete", "environment/control/rest/deleteenv"),
-                ("templates", "environment/control/rest/gettemplates"),
-                ("regions", "environment/control/rest/getregions"),
-            ],
-        ),
-        (
-            "node",
-            "Nodes and scaling",
-            vec![
-                ("list", "environment/control/rest/getenvinfo"),
-                ("restart", "environment/control/rest/restartnodebyid"),
-                ("scale", "environment/control/rest/setcloudletscountbyid"),
-            ],
-        ),
-        (
-            "logs",
-            "Read a finite snapshot of platform logs",
-            vec![
-                ("list", "environment/control/rest/getlogslist"),
-                ("read", "environment/control/rest/readlog"),
-                ("watch", "environment/control/rest/readlog"),
-            ],
-        ),
-        (
-            "files",
-            "Remote files",
-            vec![
-                ("list", "environment/file/rest/getlist"),
-                ("read", "environment/file/rest/read"),
-                ("write", "environment/file/rest/write"),
-                ("upload", "environment/file/rest/upload"),
-                ("delete", "environment/file/rest/delete"),
-            ],
-        ),
-        (
-            "vars",
-            "Container variables (values use JSON file/stdin)",
-            vec![
-                ("list", "environment/control/rest/getcontainerenvvars"),
-                ("set", "environment/control/rest/setcontainerenvvars"),
-                ("delete", "environment/control/rest/removecontainerenvvars"),
-            ],
-        ),
-        (
-            "projects",
-            "Cloud Management projects",
-            vec![("list", "iaas/project/rest/get")],
-        ),
-        (
-            "s3",
-            "Object storage control plane",
-            vec![
-                ("list", "s3/bucket/rest/list"),
-                ("create", "s3/bucket/rest/create"),
-                ("delete", "s3/bucket/rest/delete"),
-                ("objects", "s3/bucket/rest/listobjects"),
-                ("create-account", "s3/account/rest/create"),
-                ("keys", "s3/account/rest/getkeys"),
-                ("generate-key", "s3/account/rest/generatekey"),
-            ],
-        ),
-        (
-            "billing",
-            "Quotas and provider pricing (not a guaranteed cost estimate)",
-            vec![
-                ("quotas", "billing/account/rest/getquotas"),
-                ("pricing", "billing/pricing/rest/getpricing"),
-            ],
-        ),
-        (
-            "operations",
-            "Inspect asynchronous platform operations",
-            vec![
-                ("list", "environment/tracking/rest/getcurrentactions"),
-                ("get", "environment/tracking/rest/getaction"),
-            ],
-        ),
-    ]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -389,10 +283,8 @@ mod tests {
     #[test]
     fn friendly_commands_use_real_methods() {
         let catalog = Catalog::embedded().unwrap();
-        for group in friendly_groups() {
-            for (_, path) in group.2 {
-                assert!(catalog.find(path).is_some(), "{path}");
-            }
+        for spec in crate::registry::COMMANDS {
+            assert!(spec.method(&catalog).is_ok(), "{}", spec.path);
         }
     }
     #[test]

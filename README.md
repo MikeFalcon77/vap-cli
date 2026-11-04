@@ -1,6 +1,6 @@
 # vap
 
-A Rust CLI for Virtuozzo Application Management, Cloud Management and S3 APIs.
+A Rust CLI for Virtuozzo Application Management, Cloud Management and S3 APIs. A single executable, no Java runtime required.
 
 ## Build
 
@@ -56,6 +56,9 @@ For scripts, use `--json` and explicitly pass `--yes` for modifying operations.
 files, stdin, `VAP_TOKEN_FILE`, or your CI secret store.
 
 ## Development and releases
+
+See the [architecture and extension guide](docs/architecture.md) for adding commands,
+request execution, authentication policy and behavioral regression tests.
 
 ```sh
 cargo fmt --all -- --check

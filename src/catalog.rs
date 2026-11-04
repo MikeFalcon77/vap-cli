@@ -120,39 +120,8 @@ impl Catalog {
 }
 
 impl Method {
-    // Only explicitly audited retrieval operations are retryable. Never infer safety from GET/POST.
     pub fn read_only(&self) -> bool {
-        matches!(
-            self.path.as_str(),
-            "environment/control/rest/getenvs"
-                | "environment/control/rest/getenvinfo"
-                | "environment/control/rest/gettemplates"
-                | "environment/control/rest/getregions"
-                | "environment/control/rest/getallsumstat"
-                | "environment/tracking/rest/getcurrentactions"
-                | "environment/tracking/rest/getaction"
-                | "environment/tracking/rest/getactions"
-                | "environment/file/rest/getlist"
-                | "environment/file/rest/read"
-                | "environment/control/rest/getlogs"
-                | "environment/control/rest/getlog"
-                | "environment/control/rest/getloglist"
-                | "environment/control/rest/getlogslist"
-                | "environment/control/rest/readlog"
-                | "environment/control/rest/getcontainernodetags"
-                | "environment/control/rest/getenvvariables"
-                | "environment/control/rest/getcontainervars"
-                | "environment/control/rest/getcontainerenvvars"
-                | "iaas/project/rest/get"
-                | "s3/bucket/rest/list"
-                | "s3/bucket/rest/listobjects"
-                | "s3/account/rest/get"
-                | "s3/account/rest/getkeys"
-                | "billing/account/rest/getquotas"
-                | "billing/pricing/rest/getpricing"
-                | "users/authentication/rest/getuser"
-                | "environment/control/rest/getnodegroups"
-        )
+        crate::registry::MethodPolicy::for_path(&self.path).read_only()
     }
 }
 

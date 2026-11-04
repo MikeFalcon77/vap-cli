@@ -1,8 +1,10 @@
 use crate::{
-    catalog::Method,
     error::{Error, Result},
+    request::PreparedRequest,
 };
-use serde_json::{Map, Value, json};
+#[cfg(test)]
+use serde_json::Map;
+use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 
 pub struct Client {
@@ -23,17 +25,12 @@ impl Client {
 
     pub async fn call(
         &self,
-        path: &str,
-        params: &Map<String, Value>,
+        request: &PreparedRequest,
         token: Option<&str>,
-        read_only: bool,
+        deadline: tokio::time::Instant,
     ) -> Result<Value> {
-        tokio::time::timeout(
-            self.timeout,
-            self.call_inner(path, params, token, read_only),
-        )
-        .await
-        .map_err(|_| {
+        let read_only = request.policy().read_only();
+        let timeout = || {
             Error::new(
                 if read_only {
                     "TIMEOUT"
@@ -43,17 +40,19 @@ impl Client {
                 "Request deadline reached; a server operation may still continue",
             )
             .hint("Inspect current operations and resource state before retrying")
-        })?
+        };
+        if tokio::time::Instant::now() >= deadline {
+            return Err(timeout());
+        }
+        tokio::time::timeout_at(deadline, self.call_inner(request, token))
+            .await
+            .map_err(|_| timeout())?
     }
 
-    async fn call_inner(
-        &self,
-        path: &str,
-        params: &Map<String, Value>,
-        token: Option<&str>,
-        read_only: bool,
-    ) -> Result<Value> {
-        crate::catalog::validate_path(path)?;
+    async fn call_inner(&self, request: &PreparedRequest, token: Option<&str>) -> Result<Value> {
+        let path = request.path();
+        let params = request.params();
+        let read_only = request.policy().read_only();
         let mut form: Vec<(String, String)> = params
             .iter()
             .map(|(k, v)| {
@@ -234,8 +233,8 @@ pub fn payload(mut value: Value) -> Value {
     value
 }
 
-pub fn preview(method: &Method, params: &Map<String, Value>, platform: Option<&str>) -> Value {
-    json!({"preview":true,"validation":"local request construction only; no server request or cost guarantee","platform":platform,"http_method":"POST","path":format!("/1.0/{}",method.path),"parameters":params,"credential":"[REDACTED]","read_only":method.read_only()})
+pub fn preview(request: &PreparedRequest, platform: Option<&str>) -> Value {
+    json!({"preview":true,"validation":"local request construction only; no server request or cost guarantee","platform":platform,"http_method":"POST","path":format!("/1.0/{}",request.path()),"parameters":request.params(),"credential":"[REDACTED]","read_only":request.policy().read_only()})
 }
 
 #[cfg(test)]
@@ -279,9 +278,12 @@ mod tests {
         let handle = std::thread::spawn(move || {
             let mut requests = vec![];
             for (status, body) in responses {
-                let (mut stream, _) = listener.accept().unwrap();
+                let mut stream = crate::test_support::accept(&listener);
                 stream
                     .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                stream
+                    .set_write_timeout(Some(Duration::from_secs(5)))
                     .unwrap();
                 let mut bytes = vec![];
                 let mut buf = [0; 8192];
@@ -329,10 +331,10 @@ mod tests {
         assert_eq!(
             client
                 .call(
-                    "environment/control/rest/getenvs",
-                    &Map::new(),
+                    &PreparedRequest::new("environment/control/rest/getenvs", Map::new().clone())
+                        .unwrap(),
                     Some("fake"),
-                    true
+                    tokio::time::Instant::now() + client.timeout
                 )
                 .await
                 .unwrap_err()
@@ -356,10 +358,10 @@ mod tests {
                 .clone();
         let e = client
             .call(
-                "environment/control/rest/createenvironment",
-                &params,
+                &PreparedRequest::new("environment/control/rest/createenvironment", params.clone())
+                    .unwrap(),
                 Some("FAKE_SESSION"),
-                false,
+                tokio::time::Instant::now() + client.timeout,
             )
             .await
             .unwrap_err();
@@ -387,10 +389,10 @@ mod tests {
         let client = Client::new(&base, Duration::from_secs(5), None).unwrap();
         client
             .call(
-                "environment/control/rest/getenvs",
-                &Map::new(),
+                &PreparedRequest::new("environment/control/rest/getenvs", Map::new().clone())
+                    .unwrap(),
                 Some("fake"),
-                true,
+                tokio::time::Instant::now() + client.timeout,
             )
             .await
             .unwrap();
@@ -401,10 +403,10 @@ mod tests {
         assert_eq!(
             client
                 .call(
-                    "environment/control/rest/stopenv",
-                    &Map::new(),
+                    &PreparedRequest::new("environment/control/rest/stopenv", Map::new().clone())
+                        .unwrap(),
                     Some("fake"),
-                    false
+                    tokio::time::Instant::now() + client.timeout
                 )
                 .await
                 .unwrap_err()
@@ -424,10 +426,13 @@ mod tests {
         assert_eq!(
             client
                 .call(
-                    "environment/control/rest/createenvironment",
-                    &Map::new(),
+                    &PreparedRequest::new(
+                        "environment/control/rest/createenvironment",
+                        Map::new().clone()
+                    )
+                    .unwrap(),
                     Some("fake"),
-                    false
+                    tokio::time::Instant::now() + client.timeout
                 )
                 .await
                 .unwrap_err()
@@ -447,10 +452,10 @@ mod tests {
         let client = Client::new(&base, Duration::from_secs(15), None).unwrap();
         let value = client
             .call(
-                "environment/control/rest/gettemplates",
-                &Map::new(),
+                &PreparedRequest::new("environment/control/rest/gettemplates", Map::new().clone())
+                    .unwrap(),
                 Some("fake"),
-                true,
+                tokio::time::Instant::now() + client.timeout,
             )
             .await
             .unwrap();
