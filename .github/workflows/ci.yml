@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: [reqwest, toolkit-http]
+        backend: ${{ fromJSON(inputs.package && '["reqwest"]' || '["reqwest", "toolkit-http"]') }}
         platform:
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-musl
@@ -102,11 +102,11 @@ jobs:
           set -euo pipefail
           suffix=''
           if [[ '${{ runner.os }}' == 'Windows' ]]; then suffix='.exe'; fi
-          python tools/package.py --backend '${{ matrix.backend }}' --target '${{ matrix.platform.target }}' --binary 'target/${{ matrix.platform.target }}/release/vap'"$suffix"
+          python tools/package.py --target '${{ matrix.platform.target }}' --binary 'target/${{ matrix.platform.target }}/release/vap'"$suffix"
       - uses: actions/upload-artifact@v4
         if: inputs.package
         with:
-          name: vap-${{ matrix.backend }}-${{ matrix.platform.target }}
+          name: vap-${{ matrix.platform.target }}
           path: dist/vap-*
           if-no-files-found: error
           retention-days: 7
