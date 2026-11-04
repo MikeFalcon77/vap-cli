@@ -59,8 +59,8 @@ jobs:
           set -euo pipefail
           cd dist
           count=$(find . -maxdepth 1 -name '*.sha256' | wc -l)
-          if [[ "$count" -ne 12 ]]; then
-            echo "Expected 12 binary checksums, got $count" >&2
+          if [[ "$count" -ne 6 ]]; then
+            echo "Expected 6 binary checksums, got $count" >&2
             exit 1
           fi
           sha256sum --check ./*.sha256
