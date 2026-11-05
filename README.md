@@ -69,6 +69,7 @@ cargo deny --locked check advisories --warn unmaintained
 ```
 
 CI checks the release backend (reqwest) on Linux, Windows and macOS, each on x86_64 and ARM64.
+Pull requests run CI once. Version tags run CI once through the release workflow before publishing.
 RustSec also runs daily; vulnerabilities fail CI, while unmaintained crates produce
 warnings. Dependabot checks Cargo and GitHub Actions weekly.
 
