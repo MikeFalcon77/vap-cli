@@ -1,6 +1,6 @@
 [package]
 name = "vap-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Discoverable Virtuozzo API CLI for people and automation"
 rust-version = "1.88"
