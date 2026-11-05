@@ -78,6 +78,8 @@ Pushing a tag matching the Cargo version (`vX.Y.Z`) publishes a
 reqwest backend. Each platform gets an archive containing `vap` (Linux/macOS) or
 `vap.exe` (Windows), a SHA256 checksum and a provenance attestation. Archive names
 include the version and target; Windows uses ZIP, Linux/macOS use tar.gz.
+The tag must match `Cargo.toml` (`0.1.0` → `v0.1.0`). Releases created in the
+GitHub UI receive the same verified assets; existing assets are not overwritten.
 Verify a downloaded archive with:
 
 ```sh
