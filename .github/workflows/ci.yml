@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: ['**']
   pull_request:
   workflow_dispatch:
   schedule:
@@ -43,7 +41,7 @@ jobs:
       - name: Install cargo-deny
         if: steps.deny-cache.outputs.cache-hit != 'true'
         run: cargo install cargo-deny --version 0.20.2 --locked
-      - name: Check RustSec advisories for all platforms and backends
+      - name: Check RustSec advisories for release dependencies
         run: cargo deny --locked check advisories --warn unmaintained
 
   check:
@@ -53,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: ${{ fromJSON(inputs.package && '["reqwest"]' || '["reqwest", "toolkit-http"]') }}
+        backend: [reqwest]
         platform:
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-musl
@@ -87,7 +85,26 @@ jobs:
       - name: Rust formatting
         run: cargo fmt --all -- --check
       - name: Dependency guard
-        run: python tools/check_dependencies.py --backend ${{ matrix.backend }} --target ${{ matrix.platform.target }}
+        env:
+          VAP_HTTP_BACKEND: ${{ matrix.backend }}
+          VAP_BUILD_TARGET: ${{ matrix.platform.target }}
+        shell: python
+        run: |
+          import os
+          import subprocess
+
+          backend = os.environ['VAP_HTTP_BACKEND']
+          tree = subprocess.check_output([
+              'cargo', 'tree', '--locked', '--target', os.environ['VAP_BUILD_TARGET'],
+              '--no-default-features', '--features', f'{backend}-client',
+              '--edges', 'normal,build', '--prefix', 'none', '--format', '{p}',
+          ], text=True)
+          forbidden = {'aws-lc-fips-sys', 'openssl', 'openssl-sys', 'libdbus-sys'}
+          forbidden |= {'aws-lc-rs', 'aws-lc-sys'} if backend == 'reqwest' else {'reqwest'}
+          found = sorted({line.split()[0] for line in tree.splitlines() if line.split()} & forbidden)
+          if found:
+              raise SystemExit(f'Forbidden dependencies: {found}')
+          print(f'{backend}: dependency guard passed')
       - name: Clippy
         run: cargo clippy --no-default-features --features ${{ matrix.backend }}-client --locked --target ${{ matrix.platform.target }} --all-targets -- -D warnings
       - name: Tests

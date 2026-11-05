@@ -212,6 +212,7 @@ pub fn read_legacy(source: &str) -> Result<(String, Zeroizing<String>)> {
 }
 
 pub fn save_profile(
+    mut conf: Config,
     name: &str,
     platform: String,
     token: &str,
@@ -220,7 +221,6 @@ pub fn save_profile(
     source: Option<String>,
 ) -> Result<serde_json::Value> {
     config::validate_profile(name)?;
-    let mut conf = Config::load()?;
     let old = conf.profiles.get(name).cloned();
     let id = format!(
         "vap-{}-{}",

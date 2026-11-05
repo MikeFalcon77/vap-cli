@@ -8,7 +8,7 @@ use std::{
 };
 use zeroize::Zeroizing;
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     pub default_profile: Option<String>,
     #[serde(default)]
@@ -282,6 +282,9 @@ pub fn credential(profile: &Profile) -> Result<Zeroizing<String>> {
     if let Some(path) = std::env::var_os("VAP_TOKEN_FILE") {
         return validate_token(fs::read_to_string(path)?);
     }
+    stored_credential(profile)
+}
+pub fn stored_credential(profile: &Profile) -> Result<Zeroizing<String>> {
     let token = match profile.credential_store.as_str() {
         "keychain" => entry(profile)?.get_password().map_err(|_| {
             Error::new(

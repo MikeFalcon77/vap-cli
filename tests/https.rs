@@ -1,4 +1,5 @@
 #![cfg(feature = "reqwest-client")]
+mod support;
 use serde_json::Value;
 use std::{
     io::{Read, Write},
@@ -43,9 +44,12 @@ fn server_sequence(
         let mut requests = String::new();
         let config = Arc::new(config);
         for response in responses {
-            let (stream, _) = listener.accept().unwrap();
+            let stream = support::accept(&listener);
             stream
                 .set_read_timeout(Some(Duration::from_secs(10)))
+                .unwrap();
+            stream
+                .set_write_timeout(Some(Duration::from_secs(10)))
                 .unwrap();
             let conn = rustls::ServerConnection::new(config.clone()).unwrap();
             let mut tls = rustls::StreamOwned::new(conn, stream);
@@ -81,18 +85,22 @@ fn server_sequence(
     (url, ca, thread)
 }
 fn run(root: &tempfile::TempDir, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_vap"))
-        .args(args)
-        .env("VAP_CONFIG_DIR", root.path().join("config"))
-        .env("VAP_TOKEN", "FAKE_SESSION_SENTINEL")
-        .env_remove("VAP_PROFILE")
-        .env_remove("VAP_PLATFORM")
-        .env_remove("VAP_TOKEN_FILE")
-        .env("NO_PROXY", "localhost,127.0.0.1")
-        .env("no_proxy", "localhost,127.0.0.1")
-        .stdin(Stdio::null())
-        .output()
-        .unwrap()
+    support::wait_output(
+        Command::new(env!("CARGO_BIN_EXE_vap"))
+            .args(args)
+            .env("VAP_CONFIG_DIR", root.path().join("config"))
+            .env("VAP_TOKEN", "FAKE_SESSION_SENTINEL")
+            .env_remove("VAP_PROFILE")
+            .env_remove("VAP_PLATFORM")
+            .env_remove("VAP_TOKEN_FILE")
+            .env("NO_PROXY", "localhost,127.0.0.1")
+            .env("no_proxy", "localhost,127.0.0.1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    )
 }
 #[test]
 fn modifying_command_is_sent_once_and_one_time_key_is_saved_privately() {

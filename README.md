@@ -1,6 +1,6 @@
 # vap
 
-A Rust CLI for Virtuozzo Application Management, Cloud Management and S3 APIs.
+A Rust CLI for Virtuozzo Application Management, Cloud Management and S3 APIs. A single executable, no Java runtime required.
 
 ## Build
 
@@ -57,6 +57,9 @@ files, stdin, `VAP_TOKEN_FILE`, or your CI secret store.
 
 ## Development and releases
 
+See the [architecture and extension guide](docs/architecture.md) for adding commands,
+request execution, authentication policy and behavioral regression tests.
+
 ```sh
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
@@ -65,7 +68,8 @@ cargo install cargo-deny --version 0.20.2 --locked
 cargo deny --locked check advisories --warn unmaintained
 ```
 
-CI checks both HTTP backends on Linux, Windows and macOS, each on x86_64 and ARM64.
+CI checks the release backend (reqwest) on Linux, Windows and macOS, each on x86_64 and ARM64.
+Pull requests run CI once. Version tags run CI once through the release workflow before publishing.
 RustSec also runs daily; vulnerabilities fail CI, while unmaintained crates produce
 warnings. Dependabot checks Cargo and GitHub Actions weekly.
 
