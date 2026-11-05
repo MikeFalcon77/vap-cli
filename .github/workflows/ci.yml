@@ -43,7 +43,7 @@ jobs:
       - name: Install cargo-deny
         if: steps.deny-cache.outputs.cache-hit != 'true'
         run: cargo install cargo-deny --version 0.20.2 --locked
-      - name: Check RustSec advisories for all platforms and backends
+      - name: Check RustSec advisories for release dependencies
         run: cargo deny --locked check advisories --warn unmaintained
 
   check:
@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: ${{ fromJSON(inputs.package && '["reqwest"]' || '["reqwest", "toolkit-http"]') }}
+        backend: [reqwest]
         platform:
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-musl

@@ -68,7 +68,7 @@ cargo install cargo-deny --version 0.20.2 --locked
 cargo deny --locked check advisories --warn unmaintained
 ```
 
-CI checks both HTTP backends on Linux, Windows and macOS, each on x86_64 and ARM64.
+CI checks the release backend (reqwest) on Linux, Windows and macOS, each on x86_64 and ARM64.
 RustSec also runs daily; vulnerabilities fail CI, while unmaintained crates produce
 warnings. Dependabot checks Cargo and GitHub Actions weekly.
 

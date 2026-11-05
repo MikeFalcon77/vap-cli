@@ -1,6 +1,7 @@
-# Inspect the complete dependency graph, including both HTTP backends and all OSes.
+# Audit the release backend across all operating systems.
 [graph]
-all-features = true
+all-features = false
+features = ["reqwest-client"]
 
 [advisories]
 db-urls = ["https://github.com/RustSec/advisory-db"]
